@@ -1,16 +1,4 @@
-import express from 'express';
-import request from 'supertest';
-import { reportsRouter } from '../../src/routes/reports';
-
-import { requireSupabaseUser } from '../../src/auth/supabase';
-import { supabaseAdmin } from '../../src/db/supabaseAdmin';
-import { sendReportLinkEmail } from '../../src/email/resend';
-import { htmlToPdfBuffer } from '../../src/reporting/pdf';
-import { fetchReportData } from '../../src/reporting/reportData';
-import { renderReportHtml } from '../../src/reporting/reportTemplate';
-import { randomToken, sha256Hex } from '../../src/util/crypto';
-
-// Mock all dependencies for integration testing
+// Mock all dependencies BEFORE importing modules
 jest.mock('../../src/auth/supabase', () => ({
   requireSupabaseUser: jest.fn()
 }));
@@ -44,6 +32,18 @@ jest.mock('../../src/util/crypto', () => ({
   randomToken: jest.fn(),
   sha256Hex: jest.fn()
 }));
+
+import express from 'express';
+import request from 'supertest';
+import { reportsRouter } from '../../src/routes/reports';
+
+import { requireSupabaseUser } from '../../src/auth/supabase';
+import { supabaseAdmin } from '../../src/db/supabaseAdmin';
+import { sendReportLinkEmail } from '../../src/email/resend';
+import { htmlToPdfBuffer } from '../../src/reporting/pdf';
+import { fetchReportData } from '../../src/reporting/reportData';
+import { renderReportHtml } from '../../src/reporting/reportTemplate';
+import { randomToken, sha256Hex } from '../../src/util/crypto';
 
 const mockRequireSupabaseUser = requireSupabaseUser as jest.MockedFunction<typeof requireSupabaseUser>;
 const mockSupabaseFrom = supabaseAdmin.from as jest.MockedFunction<typeof supabaseAdmin.from>;
@@ -255,22 +255,35 @@ describe('Reports API Integration Tests', () => {
         status: 'sent'
       };
 
-      // Mock database query
-      const mockSelect = jest.fn().mockReturnThis();
-      const mockEq = jest.fn().mockResolvedValue({
+      // Mock database query chain: from().select().eq().maybeSingle()
+      const mockMaybeSingle = jest.fn().mockResolvedValue({
         data: mockReportData,
         error: null
       });
+      const mockSelectEq = jest.fn().mockReturnValue({
+        maybeSingle: mockMaybeSingle
+      });
+      const mockSelect = jest.fn().mockReturnValue({
+        eq: mockSelectEq
+      });
 
-      const mockUpdate = jest.fn().mockResolvedValue({
+      // Mock database update chain: from().update().eq()
+      const mockUpdateEq = jest.fn().mockResolvedValue({
         data: null,
         error: null
       });
+      const mockUpdate = jest.fn().mockReturnValue({
+        eq: mockUpdateEq
+      });
 
-      const mockFrom = jest.fn().mockReturnValue({
-        select: mockSelect,
-        eq: mockEq,
-        update: mockUpdate
+      const mockFrom = jest.fn().mockImplementation((table: string) => {
+        if (table === 'report_exports') {
+          return {
+            select: mockSelect,
+            update: mockUpdate
+          };
+        }
+        return {};
       });
 
       mockSupabaseFrom.mockImplementation(mockFrom);
@@ -299,7 +312,7 @@ describe('Reports API Integration Tests', () => {
       expect(mockSha256Hex).toHaveBeenCalledWith('access-token-123');
       expect(mockSupabaseFrom).toHaveBeenCalledWith('report_exports');
       expect(mockSelect).toHaveBeenCalledWith('id, storage_bucket, storage_path, expires_at, revoked_at, downloaded_at, status');
-      expect(mockEq).toHaveBeenCalledWith('token_hash', testTokenHash);
+      expect(mockSelectEq).toHaveBeenCalledWith('token_hash', testTokenHash);
 
       // Verify signed URL creation
       expect(mockSupabaseStorageFrom).toHaveBeenCalledWith('test-reports');
@@ -310,7 +323,7 @@ describe('Reports API Integration Tests', () => {
         downloaded_at: expect.any(String),
         status: 'downloaded'
       });
-      expect(mockEq).toHaveBeenCalledWith('id', 'report-456');
+      expect(mockUpdateEq).toHaveBeenCalledWith('id', 'report-456');
     });
 
     it('should handle report listing', async () => {
@@ -375,24 +388,27 @@ describe('Reports API Integration Tests', () => {
 
       mockRequireSupabaseUser.mockResolvedValue({ userId: testUserId });
 
-      // Mock database update chain
-      const mockEq = jest.fn().mockResolvedValue({
-        data: null,
+      // Mock database update chain: from().update().eq().eq().select().maybeSingle()
+      const mockMaybeSingle = jest.fn().mockResolvedValue({
+        data: { id: 'report-2' },
         error: null
       });
-
-      const mockUpdate = jest.fn().mockReturnValue({
-        eq: mockEq
-      });
-
       const mockSelect = jest.fn().mockReturnValue({
-        eq: jest.fn()
+        maybeSingle: mockMaybeSingle
+      });
+      const mockSecondEq = jest.fn().mockReturnValue({
+        select: mockSelect
+      });
+      const mockFirstEq = jest.fn().mockReturnValue({
+        eq: mockSecondEq
+      });
+      const mockUpdate = jest.fn().mockReturnValue({
+        eq: mockFirstEq
       });
 
       mockSupabaseFrom.mockImplementation((table: string) => {
         if (table === 'report_exports') {
           return {
-            select: mockSelect,
             update: mockUpdate
           } as any;
         }
@@ -415,11 +431,11 @@ describe('Reports API Integration Tests', () => {
 
   describe('Error Handling and Edge Cases', () => {
     it('should handle malformed tokens in report access', async () => {
-      const response = await request(app)
+      // Note: Express routes won't match /reports/r/ (empty param), so we get 404
+      // To test the "Missing token" handler, we'd need a different route structure
+      await request(app)
         .get('/reports/r/')
-        .expect(400);
-
-      expect(response.text).toBe('Missing token');
+        .expect(404);
     });
 
     it('should handle expired reports', async () => {
@@ -436,11 +452,16 @@ describe('Reports API Integration Tests', () => {
         status: 'sent'
       };
 
-      const mockEq = jest.fn().mockResolvedValue({
+      const mockMaybeSingle = jest.fn().mockResolvedValue({
         data: mockReportData,
         error: null
       });
-      const mockSelect = jest.fn().mockReturnValue({ eq: mockEq });
+      const mockSelectEq = jest.fn().mockReturnValue({
+        maybeSingle: mockMaybeSingle
+      });
+      const mockSelect = jest.fn().mockReturnValue({
+        eq: mockSelectEq
+      });
 
       mockSupabaseFrom.mockReturnValue({
         select: mockSelect
@@ -467,11 +488,16 @@ describe('Reports API Integration Tests', () => {
         status: 'revoked'
       };
 
-      const mockEq = jest.fn().mockResolvedValue({
+      const mockMaybeSingle = jest.fn().mockResolvedValue({
         data: mockReportData,
         error: null
       });
-      const mockSelect = jest.fn().mockReturnValue({ eq: mockEq });
+      const mockSelectEq = jest.fn().mockReturnValue({
+        maybeSingle: mockMaybeSingle
+      });
+      const mockSelect = jest.fn().mockReturnValue({
+        eq: mockSelectEq
+      });
 
       mockSupabaseFrom.mockReturnValue({
         select: mockSelect
@@ -485,11 +511,32 @@ describe('Reports API Integration Tests', () => {
     });
 
     it('should handle rate limiting on report access', async () => {
-      // This would require setting up rate limiting middleware in tests
-      // For now, we verify the endpoint exists and handles basic rate limit structure
-      const response = await request(app)
-        .get('/reports/r/any-token')
-        .expect(400); // Will fail due to missing token, but route exists
+      // Reset mocks to avoid interference from previous tests
+      jest.clearAllMocks();
+
+      // Mock sha256 to return a non-matching hash
+      mockSha256Hex.mockReturnValue('non-matching-hash');
+
+      // Mock database to return no data
+      const mockMaybeSingle = jest.fn().mockResolvedValue({
+        data: null,
+        error: null
+      });
+      const mockSelectEq = jest.fn().mockReturnValue({
+        maybeSingle: mockMaybeSingle
+      });
+      const mockSelect = jest.fn().mockReturnValue({
+        eq: mockSelectEq
+      });
+
+      mockSupabaseFrom.mockReturnValue({
+        select: mockSelect
+      } as any);
+
+      // Token not found should return 404
+      await request(app)
+        .get('/reports/r/test-token')
+        .expect(404);
     });
 
     it('should validate email format in report requests', async () => {
@@ -507,7 +554,8 @@ describe('Reports API Integration Tests', () => {
         .send(invalidRequest)
         .expect(400);
 
-      expect(response.body.error).toContain('Validation');
+      // Zod validation error appears as JSON in the error message
+      expect(response.body.error).toContain('Invalid email address');
     });
   });
 });
