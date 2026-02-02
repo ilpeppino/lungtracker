@@ -1,4 +1,5 @@
 import { Router } from "express";
+import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { requireSupabaseUser } from "../auth/supabase.js";
 import { config } from "../config.js";
@@ -11,6 +12,13 @@ import { randomToken, sha256Hex } from "../util/crypto.js";
 import { sendReportLinkEmail } from "../email/resend.js";
 
 export const reportsRouter = Router();
+
+const downloadLimiter = rateLimit({
+  windowMs: 60_000, // 1 minute
+  limit: 30, // 30 requests per minute per IP
+  standardHeaders: true,
+  legacyHeaders: false
+});
 
 const emailLinkSchema = z.object({
   rangeStart: z.string().min(1),
@@ -31,7 +39,7 @@ reportsRouter.get("/exports", async (req, res) => {
 
     const q = await supabaseAdmin
       .from("report_exports")
-      .select("id, range_start, range_end, recipient_email, sent_at, downloaded_at, expires_at, status")
+      .select("id, range_start, range_end, recipient_email, sent_at, downloaded_at, expires_at, revoked_at, status")
       .eq("user_id", userId)
       .order("sent_at", { ascending: false })
       .limit(limit);
@@ -138,6 +146,38 @@ reportsRouter.post("/email-link", async (req, res) => {
   }
 });
 
+
+/**
+ * POST /reports/revoke/:id
+ * Auth required. Revokes a previously generated report link.
+ */
+reportsRouter.post("/revoke/:id", async (req, res) => {
+  try {
+    const { userId } = await requireSupabaseUser(req.headers.authorization);
+    const id = req.params.id;
+    if (!id) return res.status(400).json({ error: "Missing id" });
+
+    // Only revoke if it belongs to the caller
+    const upd = await supabaseAdmin
+      .from("report_exports")
+      .update({
+        revoked_at: new Date().toISOString(),
+        status: "revoked"
+      })
+      .eq("id", id)
+      .eq("user_id", userId)
+      .select("id")
+      .maybeSingle();
+
+    if (upd.error) throw upd.error;
+    if (!upd.data) return res.status(404).json({ error: "Not found" });
+
+    return res.json({ ok: true });
+  } catch (e: any) {
+    return res.status(400).json({ error: e?.message ?? "Bad request" });
+  }
+});
+
 /**
  * GET /reports/r/:token
  * Public endpoint (recipient)
@@ -147,7 +187,7 @@ reportsRouter.post("/email-link", async (req, res) => {
  * - Create short-lived signed URL for the PDF
  * - Log download and redirect to signed URL
  */
-reportsRouter.get("/r/:token", async (req, res) => {
+reportsRouter.get("/r/:token", downloadLimiter, async (req, res) => {
   try {
     const token = req.params.token;
     if (!token) return res.status(400).send("Missing token");

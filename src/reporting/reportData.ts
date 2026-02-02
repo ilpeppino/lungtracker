@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "../db/supabaseAdmin.js";
+import { computeReportSummary } from "./stats.js";
 
 export async function fetchReportData(params: {
   userId: string;
@@ -35,9 +36,20 @@ export async function fetchReportData(params: {
   if (activities.error) throw activities.error;
   if (events.error) throw events.error;
 
+  const vitalsRows = vitals.data ?? [];
+  const activitiesRows = activities.data ?? [];
+  const eventsRows = events.data ?? [];
+
+  const summary = computeReportSummary({
+    vitals: vitalsRows,
+    activities: activitiesRows,
+    events: eventsRows
+  });
+
   return {
-    vitals: vitals.data ?? [],
-    activities: activities.data ?? [],
-    events: events.data ?? []
+    vitals: vitalsRows,
+    activities: activitiesRows,
+    events: eventsRows,
+    summary
   };
 }
