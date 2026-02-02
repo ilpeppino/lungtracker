@@ -33,6 +33,12 @@ In the output, you'll find options to open the app in a
 
 You can start developing by editing the files inside the **src** directory.
 
+## Backend
+
+Deployed via Render:
+
+https://lungtracker.onrender.com
+
 ## Learn more
 
 To learn more about developing your project with Expo, look at the following resources:
