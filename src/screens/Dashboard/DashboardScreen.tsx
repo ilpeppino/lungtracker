@@ -1,8 +1,17 @@
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useState } from "react";
-import { Alert, Button, Text, TextInput, View } from "react-native";
+import { Alert, Button, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useCreateActivity, useLatestActivity } from "../../hooks/useActivities";
 import { useCreateEvent, useLatestEvent } from "../../hooks/useEvents";
 import { useCreateVitals, useLatestVitals } from "../../hooks/useVitals";
+import type { RootStackParamList } from "../../navigation/RootNavigator";
+import { Fab } from "../../ui/Fab";
+import { Icon } from "../../ui/Icon";
+import { IconButton } from "../../ui/IconButton";
+import { Icons } from "../../ui/icons";
+import { theme } from "../../ui/theme";
 
 function toNumberOrNull(v: string): number | null {
   const t = v.trim();
@@ -12,6 +21,7 @@ function toNumberOrNull(v: string): number | null {
 }
 
 export default function DashboardScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const latest = useLatestVitals();
   const create = useCreateVitals();
 
@@ -99,156 +109,238 @@ export default function DashboardScreen() {
   };
 
   return (
-    <View style={{ flex: 1, padding: 16, gap: 12 }}>
-      <Text style={{ fontSize: 24, fontWeight: "600" }}>Dashboard</Text>
+    <SafeAreaView style={styles.screen}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+      >
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <Icon icon={Icons.dashboard} />
+            <Text style={{ fontSize: 24, fontWeight: "600" }}>Dashboard</Text>
+          </View>
 
-      <View style={{ padding: 12, borderWidth: 1, borderRadius: 8 }}>
-        <Text style={{ fontWeight: "600", marginBottom: 6 }}>Latest Vitals</Text>
+          <View style={{ flexDirection: "row", gap: 12 }}>
+            <IconButton
+              icon={Icons.history}
+              accessibilityLabel="Open history"
+              onPress={() => navigation.navigate("History" as never)}
+            />
 
-        {latest.isLoading ? (
-          <Text>Loading…</Text>
-        ) : latest.data ? (
-          <Text>
-            {new Date(latest.data.measured_at).toLocaleString()} — Pulse:{" "}
-            {latest.data.pulse_bpm ?? "-"} | BP: {latest.data.systolic ?? "-"}
-            /{latest.data.diastolic ?? "-"}
+            <IconButton
+              icon={Icons.add}
+              accessibilityLabel="Add vitals"
+              onPress={() => navigation.navigate("AddVitals")}
+            />
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={{ fontWeight: "600", marginBottom: 6 }}>
+            Latest Vitals
           </Text>
-        ) : (
-          <Text>No vitals yet.</Text>
-        )}
-      </View>
 
-      <View style={{ padding: 12, borderWidth: 1, borderRadius: 8, gap: 10 }}>
-        <Text style={{ fontWeight: "600" }}>Add Vitals (quick)</Text>
+          {latest.isLoading ? (
+            <Text>Loading…</Text>
+          ) : latest.data ? (
+            <Text>
+              {new Date(latest.data.measured_at).toLocaleString()} — Pulse:{" "}
+              {latest.data.pulse_bpm ?? "-"} | BP: {latest.data.systolic ?? "-"}
+              /{latest.data.diastolic ?? "-"}
+            </Text>
+          ) : (
+            <Text>No vitals yet.</Text>
+          )}
+        </View>
 
-        <TextInput
-          placeholder="Pulse (bpm)"
-          value={pulse}
-          onChangeText={setPulse}
-          keyboardType="numeric"
-          style={{ borderWidth: 1, padding: 10, borderRadius: 8 }}
-        />
+        <View style={[styles.card, styles.cardGap]}>
+          <Text style={{ fontWeight: "600" }}>Add Vitals (quick)</Text>
 
-        <TextInput
-          placeholder="Systolic"
-          value={sys}
-          onChangeText={setSys}
-          keyboardType="numeric"
-          style={{ borderWidth: 1, padding: 10, borderRadius: 8 }}
-        />
+          <TextInput
+            placeholder="Pulse (bpm)"
+            value={pulse}
+            onChangeText={setPulse}
+            keyboardType="numeric"
+            style={styles.input}
+          />
 
-        <TextInput
-          placeholder="Diastolic"
-          value={dia}
-          onChangeText={setDia}
-          keyboardType="numeric"
-          style={{ borderWidth: 1, padding: 10, borderRadius: 8 }}
-        />
+          <TextInput
+            placeholder="Systolic"
+            value={sys}
+            onChangeText={setSys}
+            keyboardType="numeric"
+            style={styles.input}
+          />
 
-        <Button
-          title={create.isPending ? "Saving…" : "Save vitals"}
-          onPress={onSave}
-          disabled={create.isPending}
-        />
-      </View>
-      
+          <TextInput
+            placeholder="Diastolic"
+            value={dia}
+            onChangeText={setDia}
+            keyboardType="numeric"
+            style={styles.input}
+          />
 
-      <View style={{ padding: 12, borderWidth: 1, borderRadius: 8, gap: 10 }}>
-        <Text style={{ fontWeight: "600" }}>Latest Activity</Text>
+          <Button
+            title={create.isPending ? "Saving…" : "Save vitals"}
+            onPress={onSave}
+            disabled={create.isPending}
+          />
+        </View>
 
-        {latestActivity.isLoading ? (
-          <Text>Loading…</Text>
-        ) : latestActivity.data ? (
-          <Text>
-            {new Date(latestActivity.data.performed_at).toLocaleString()} —{" "}
-            {latestActivity.data.activity_type}
-            {" | "}
-            {latestActivity.data.duration_minutes ?? "-"} min
-            {" | "}
-            {latestActivity.data.distance_km ?? "-"} km
-            {" | "}
-            {latestActivity.data.floors ?? "-"} floors
+        <View style={[styles.card, styles.cardGap]}>
+          <Text style={{ fontWeight: "600" }}>Latest Activity</Text>
+
+          {latestActivity.isLoading ? (
+            <Text>Loading…</Text>
+          ) : latestActivity.data ? (
+            <Text>
+              {new Date(latestActivity.data.performed_at).toLocaleString()} —{" "}
+              {latestActivity.data.activity_type}
+              {" | "}
+              {latestActivity.data.duration_minutes ?? "-"} min
+              {" | "}
+              {latestActivity.data.distance_km ?? "-"} km
+              {" | "}
+              {latestActivity.data.floors ?? "-"} floors
+            </Text>
+          ) : (
+            <Text>No activities yet.</Text>
+          )}
+
+          <Text style={{ fontWeight: "600", marginTop: 6 }}>
+            Add Activity (quick)
           </Text>
-        ) : (
-          <Text>No activities yet.</Text>
-        )}
 
-        <Text style={{ fontWeight: "600", marginTop: 6 }}>Add Activity (quick)</Text>
+          <TextInput
+            placeholder="Type (walking, stairs, peloton...)"
+            value={type}
+            onChangeText={setType}
+            style={styles.input}
+          />
 
-        <TextInput
-          placeholder="Type (walking, stairs, peloton...)"
-          value={type}
-          onChangeText={setType}
-          style={{ borderWidth: 1, padding: 10, borderRadius: 8 }}
-        />
+          <TextInput
+            placeholder="Duration (minutes)"
+            value={duration}
+            onChangeText={setDuration}
+            keyboardType="numeric"
+            style={styles.input}
+          />
 
-        <TextInput
-          placeholder="Duration (minutes)"
-          value={duration}
-          onChangeText={setDuration}
-          keyboardType="numeric"
-          style={{ borderWidth: 1, padding: 10, borderRadius: 8 }}
-        />
+          <TextInput
+            placeholder="Distance (km)"
+            value={distance}
+            onChangeText={setDistance}
+            keyboardType="numeric"
+            style={styles.input}
+          />
 
-        <TextInput
-          placeholder="Distance (km)"
-          value={distance}
-          onChangeText={setDistance}
-          keyboardType="numeric"
-          style={{ borderWidth: 1, padding: 10, borderRadius: 8 }}
-        />
+          <TextInput
+            placeholder="Floors (optional)"
+            value={floors}
+            onChangeText={setFloors}
+            keyboardType="numeric"
+            style={styles.input}
+          />
 
-        <TextInput
-          placeholder="Floors (optional)"
-          value={floors}
-          onChangeText={setFloors}
-          keyboardType="numeric"
-          style={{ borderWidth: 1, padding: 10, borderRadius: 8 }}
-        />
+          <Button
+            title={createActivity.isPending ? "Saving…" : "Save activity"}
+            onPress={onSaveActivity}
+            disabled={createActivity.isPending}
+          />
+        </View>
 
-        <Button
-          title={createActivity.isPending ? "Saving…" : "Save activity"}
-          onPress={onSaveActivity}
-          disabled={createActivity.isPending}
-        />
-      </View>
+        <View style={[styles.card, styles.cardGap]}>
+          <Text style={{ fontWeight: "600" }}>Latest Event</Text>
 
-      <View style={{ padding: 12, borderWidth: 1, borderRadius: 8, gap: 10 }}>
-        <Text style={{ fontWeight: "600" }}>Latest Event</Text>
+          {latestEvent.isLoading ? (
+            <Text>Loading…</Text>
+          ) : latestEvent.data ? (
+            <Text>
+              {new Date(latestEvent.data.event_at).toLocaleString()} —{" "}
+              {latestEvent.data.title}
+            </Text>
+          ) : (
+            <Text>No events yet.</Text>
+          )}
 
-        {latestEvent.isLoading ? (
-          <Text>Loading…</Text>
-        ) : latestEvent.data ? (
-          <Text>
-            {new Date(latestEvent.data.event_at).toLocaleString()} — {latestEvent.data.title}
+          <Text style={{ fontWeight: "600", marginTop: 6 }}>
+            Add Event (quick)
           </Text>
-        ) : (
-          <Text>No events yet.</Text>
-        )}
 
-        <Text style={{ fontWeight: "600", marginTop: 6 }}>Add Event (quick)</Text>
+          <TextInput
+            placeholder="Event title (e.g. flare-up, medication change...)"
+            value={eventTitle}
+            onChangeText={setEventTitle}
+            style={styles.input}
+          />
 
-        <TextInput
-          placeholder="Event title (e.g. flare-up, medication change...)"
-          value={eventTitle}
-          onChangeText={setEventTitle}
-          style={{ borderWidth: 1, padding: 10, borderRadius: 8 }}
-        />
+          <TextInput
+            placeholder="Notes (optional)"
+            value={eventNotes}
+            onChangeText={setEventNotes}
+            multiline
+            style={[styles.input, styles.inputMultiline]}
+          />
 
-        <TextInput
-          placeholder="Notes (optional)"
-          value={eventNotes}
-          onChangeText={setEventNotes}
-          multiline
-          style={{ borderWidth: 1, padding: 10, borderRadius: 8, minHeight: 64 }}
-        />
+          <Button
+            title={createEvent.isPending ? "Saving…" : "Save event"}
+            onPress={onSaveEvent}
+            disabled={createEvent.isPending}
+          />
+        </View>
+      </ScrollView>
 
-        <Button
-          title={createEvent.isPending ? "Saving…" : "Save event"}
-          onPress={onSaveEvent}
-          disabled={createEvent.isPending}
-        />
-      </View>
-    </View>
+      <Fab
+        icon={Icons.add}
+        accessibilityLabel="Quick add"
+        onPress={() => {
+          Alert.alert("Quick add", "Choose what you want to add:", [
+            { text: "Vitals", onPress: () => navigation.navigate("AddVitals") },
+            { text: "Activity", onPress: () => navigation.navigate("AddActivity") },
+            { text: "Event", onPress: () => navigation.navigate("AddEvent") },
+            { text: "Cancel", style: "cancel" },
+          ]);
+        }}
+      />
+    </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+  },
+  content: {
+    padding: theme.spacing.screenPadding,
+    gap: theme.spacing.gap,
+    paddingBottom: theme.spacing.fabBottomPadding,
+  },
+  card: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: theme.radius.card,
+    padding: theme.spacing.cardPadding,
+  },
+  cardGap: {
+    gap: 10,
+  },
+  input: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: theme.radius.card,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  inputMultiline: {
+    minHeight: 64,
+    textAlignVertical: "top",
+  },
+});

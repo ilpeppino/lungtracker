@@ -1,18 +1,33 @@
 import React, { useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { LineChart } from "react-native-gifted-charts";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useVitalsList } from "../../hooks/useVitals";
 import { VitalsEntry } from "../../models/vitals";
+import { Fab } from "../../ui/Fab";
+import { Icon } from "../../ui/Icon";
+import { IconButton } from "../../ui/IconButton";
+import { Icons } from "../../ui/icons";
+import { theme } from "../../ui/theme";
+
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RootStackParamList } from "../../navigation/RootNavigator";
 
 type RangeDays = 7 | 30 | 90;
-type MetricKey =
+type MetricKey = "pulse_bpm" | "bp" | "fev1" | "pef";
+
+type UnitMode = "abs" | "pct";
+
+type VitalsNumericKey =
   | "pulse_bpm"
   | "systolic"
   | "diastolic"
-  | "bp"
   | "fev1_l"
+  | "fev1_predicted_l"
   | "fev1_percent"
   | "pef_l_min"
+  | "pef_predicted_l_min"
   | "pef_percent";
 
 function rangeCutoff(days: RangeDays) {
@@ -22,29 +37,21 @@ function rangeCutoff(days: RangeDays) {
   return cutoff;
 }
 
-function getMetricLabel(metric: MetricKey) {
+function getMetricLabel(metric: MetricKey, unitMode?: UnitMode) {
   switch (metric) {
     case "pulse_bpm":
       return "Pulse (bpm)";
-    case "systolic":
-      return "Systolic";
-    case "diastolic":
-      return "Diastolic";
     case "bp":
       return "Blood Pressure (sys/dia)";
-    case "fev1_l":
-      return "FEV1 (L)";
-    case "fev1_percent":
-      return "FEV1 (% predicted)";
-    case "pef_l_min":
-      return "PEF (L/min)";
-    case "pef_percent":
-      return "PEF (% predicted)";
+    case "fev1":
+      return unitMode === "pct" ? "FEV1 (% predicted)" : "FEV1 (L)";
+    case "pef":
+      return unitMode === "pct" ? "PEF (% predicted)" : "PEF (L/min)";
   }
 }
 
-function getMetricValue(v: VitalsEntry, metric: Exclude<MetricKey, "bp">): number | null {
-  const val = v[metric];
+function getMetricValue(v: VitalsEntry, metric: VitalsNumericKey): number | null {
+  const val = v[metric as keyof VitalsEntry];
   if (typeof val !== "number") return null;
   if (!Number.isFinite(val)) return null;
   return val;
@@ -77,8 +84,10 @@ function SegButton({
       style={{
         paddingVertical: 8,
         paddingHorizontal: 12,
-        borderWidth: 1,
-        borderRadius: 8,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: theme.colors.border,
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.radius.card,
         opacity: active ? 1 : 0.6,
       }}
     >
@@ -102,9 +111,10 @@ function TooltipBox({ children }: { children: React.ReactNode }) {
       style={{
         paddingVertical: 6,
         paddingHorizontal: 10,
-        borderWidth: 1,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: theme.colors.border,
         borderRadius: 8,
-        backgroundColor: "white",
+        backgroundColor: theme.colors.surface,
       }}
     >
       {children}
@@ -120,12 +130,14 @@ function TrendsLineChart({
   chartPoints2,
   line1Color,
   line2Color,
+  series2Label,
 }: {
   metric: MetricKey;
   title: string;
   chartWidth: number;
   chartPoints: { value: number; label: string }[];
   chartPoints2: { value: number; label: string }[];
+  series2Label?: string;
   line1Color: string;
   line2Color: string;
 }) {
@@ -137,6 +149,11 @@ function TrendsLineChart({
             <LegendItem label="Systolic" color={line1Color} />
             <LegendItem label="Diastolic" color={line2Color} />
           </>
+        ) : chartPoints2.length > 0 ? (
+          <>
+            <LegendItem label={title} color={line1Color} />
+            <LegendItem label={series2Label ?? "Predicted"} color={line2Color} />
+          </>
         ) : (
           <LegendItem label={title} color={line1Color} />
         )}
@@ -144,7 +161,7 @@ function TrendsLineChart({
 
       <LineChart
         data={chartPoints}
-        data2={metric === "bp" ? chartPoints2 : undefined}
+        data2={chartPoints2.length > 0 ? chartPoints2 : undefined}
         width={chartWidth}
         height={240}
         spacing={Math.max(18, Math.floor(chartWidth / 14))}
@@ -179,6 +196,11 @@ function TrendsLineChart({
                     <Text style={{ fontSize: 12 }}>Systolic: {v1 ?? "-"}</Text>
                     <Text style={{ fontSize: 12 }}>Diastolic: {v2 ?? "-"}</Text>
                   </>
+                ) : chartPoints2.length > 0 ? (
+                  <>
+                    <Text style={{ fontSize: 12 }}>{title}: {v1 ?? "-"}</Text>
+                    <Text style={{ fontSize: 12 }}>{series2Label ?? "Predicted"}: {v2 ?? "-"}</Text>
+                  </>
                 ) : (
                   <Text style={{ fontSize: 12 }}>{title}: {v1 ?? "-"}</Text>
                 )}
@@ -194,6 +216,7 @@ function TrendsLineChart({
 }
 
 export default function TrendsScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { width: windowWidth } = useWindowDimensions();
   const chartWidth = Math.max(280, Math.floor(windowWidth - 32)); // 16px padding on both sides
 
@@ -202,33 +225,27 @@ export default function TrendsScreen() {
 
   const [rangeDays, setRangeDays] = useState<RangeDays>(30);
   const [metric, setMetric] = useState<MetricKey>("pulse_bpm");
+  const [fev1Mode, setFev1Mode] = useState<UnitMode>("abs");
+  const [pefMode, setPefMode] = useState<UnitMode>("abs");
 
   // Fetch enough rows for 90 days without paging for POC.
   const vitals = useVitalsList(300);
 
-  const { chartPoints, chartPoints2, stats } = useMemo(() => {
+  const { chartPoints, chartPoints2, stats, series2Label } = useMemo(() => {
     const cutoff = rangeCutoff(rangeDays);
 
     const rows = (vitals.data ?? [])
       .filter((r) => new Date(r.measured_at) >= cutoff)
-      // sort ascending for chart
       .sort((a, b) => +new Date(a.measured_at) - +new Date(b.measured_at));
 
-    // Base points (single series)
-    const basePoints = rows
-      .map((r) => {
-        const value = metric === "bp" ? null : getMetricValue(r, metric);
-        if (value === null) return null;
-        return { value, label: formatShortDateLabel(r.measured_at) };
-      })
-      .filter((p): p is { value: number; label: string } => !!p);
+    const labelFor = (iso: string) => formatShortDateLabel(iso);
 
-    // BP dual series (systolic + diastolic)
+    // BP dual series
     const bpSys = rows
       .map((r) => {
         const value = getMetricValue(r, "systolic");
         if (value === null) return null;
-        return { value, label: formatShortDateLabel(r.measured_at) };
+        return { value, label: labelFor(r.measured_at) };
       })
       .filter((p): p is { value: number; label: string } => !!p);
 
@@ -236,17 +253,100 @@ export default function TrendsScreen() {
       .map((r) => {
         const value = getMetricValue(r, "diastolic");
         if (value === null) return null;
-        return { value, label: formatShortDateLabel(r.measured_at) };
+        return { value, label: labelFor(r.measured_at) };
       })
       .filter((p): p is { value: number; label: string } => !!p);
 
-    const series1 = metric === "bp" ? bpSys : basePoints;
-    const series2 = metric === "bp" ? bpDia : [];
+    // Pulse
+    const pulse = rows
+      .map((r) => {
+        const value = getMetricValue(r, "pulse_bpm");
+        if (value === null) return null;
+        return { value, label: labelFor(r.measured_at) };
+      })
+      .filter((p): p is { value: number; label: string } => !!p);
 
-    // Thin labels to keep x-axis readable
+    // FEV1
+    const fev1Abs = rows
+      .map((r) => {
+        const value = getMetricValue(r, "fev1_l");
+        if (value === null) return null;
+        return { value, label: labelFor(r.measured_at) };
+      })
+      .filter((p): p is { value: number; label: string } => !!p);
+
+    const fev1Pred = rows
+      .map((r) => {
+        const value = getMetricValue(r, "fev1_predicted_l");
+        if (value === null) return null;
+        return { value, label: labelFor(r.measured_at) };
+      })
+      .filter((p): p is { value: number; label: string } => !!p);
+
+    const fev1Pct = rows
+      .map((r) => {
+        const value = getMetricValue(r, "fev1_percent");
+        if (value === null) return null;
+        return { value, label: labelFor(r.measured_at) };
+      })
+      .filter((p): p is { value: number; label: string } => !!p);
+
+    // PEF
+    const pefAbs = rows
+      .map((r) => {
+        const value = getMetricValue(r, "pef_l_min");
+        if (value === null) return null;
+        return { value, label: labelFor(r.measured_at) };
+      })
+      .filter((p): p is { value: number; label: string } => !!p);
+
+    const pefPred = rows
+      .map((r) => {
+        const value = getMetricValue(r, "pef_predicted_l_min");
+        if (value === null) return null;
+        return { value, label: labelFor(r.measured_at) };
+      })
+      .filter((p): p is { value: number; label: string } => !!p);
+
+    const pefPct = rows
+      .map((r) => {
+        const value = getMetricValue(r, "pef_percent");
+        if (value === null) return null;
+        return { value, label: labelFor(r.measured_at) };
+      })
+      .filter((p): p is { value: number; label: string } => !!p);
+
+    let series1: { value: number; label: string }[] = [];
+    let series2: { value: number; label: string }[] = [];
+    let s2Label: string | undefined = undefined;
+
+    if (metric === "bp") {
+      series1 = bpSys;
+      series2 = bpDia;
+      s2Label = "Diastolic";
+    } else if (metric === "pulse_bpm") {
+      series1 = pulse;
+    } else if (metric === "fev1") {
+      if (fev1Mode === "pct") {
+        series1 = fev1Pct;
+      } else {
+        series1 = fev1Abs;
+        series2 = fev1Pred;
+        s2Label = "Predicted";
+      }
+    } else if (metric === "pef") {
+      if (pefMode === "pct") {
+        series1 = pefPct;
+      } else {
+        series1 = pefAbs;
+        series2 = pefPred;
+        s2Label = "Predicted";
+      }
+    }
+
     const MAX_LABELS = 8;
     const thinned1 = thinLabels(series1, MAX_LABELS);
-    const thinned2 = metric === "bp" ? thinLabels(series2, MAX_LABELS) : [];
+    const thinned2 = series2.length > 0 ? thinLabels(series2, MAX_LABELS) : [];
 
     const valuesAll = [...series1.map((p) => p.value), ...series2.map((p) => p.value)];
     const min = valuesAll.length ? Math.min(...valuesAll) : null;
@@ -255,94 +355,150 @@ export default function TrendsScreen() {
     return {
       chartPoints: thinned1,
       chartPoints2: thinned2,
+      series2Label: s2Label,
       stats: { count: valuesAll.length, min, max, rows: rows.length },
     };
-  }, [vitals.data, rangeDays, metric]);
+  }, [vitals.data, rangeDays, metric, fev1Mode, pefMode]);
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
-      <Text style={{ fontSize: 24, fontWeight: "600" }}>Trends</Text>
+    <SafeAreaView style={styles.screen}>
+      <ScrollView contentContainerStyle={styles.content}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <Icon icon={Icons.trends} />
+            <Text style={{ fontSize: 24, fontWeight: "600" }}>Trends</Text>
+          </View>
 
-      <View style={{ gap: 8 }}>
-        <Text style={{ fontWeight: "600" }}>Range</Text>
-        <View style={{ flexDirection: "row", gap: 8 }}>
-          <SegButton label="7d" active={rangeDays === 7} onPress={() => setRangeDays(7)} />
-          <SegButton label="30d" active={rangeDays === 30} onPress={() => setRangeDays(30)} />
-          <SegButton label="90d" active={rangeDays === 90} onPress={() => setRangeDays(90)} />
+          <View style={{ flexDirection: "row", gap: 12 }}>
+            <IconButton
+              icon={Icons.history}
+              accessibilityLabel="Open history"
+              onPress={() => navigation.navigate("History" as never)}
+            />
+
+            <IconButton
+              icon={Icons.add}
+              accessibilityLabel="Quick add"
+              onPress={() => {
+                Alert.alert("Quick add", "Choose what you want to add:", [
+                  { text: "Vitals", onPress: () => navigation.navigate("AddVitals") },
+                  { text: "Activity", onPress: () => navigation.navigate("AddActivity") },
+                  { text: "Event", onPress: () => navigation.navigate("AddEvent") },
+                  { text: "Cancel", style: "cancel" },
+                ]);
+              }}
+            />
+          </View>
         </View>
-      </View>
 
-      <View style={{ gap: 8 }}>
-        <Text style={{ fontWeight: "600" }}>Metric</Text>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          <SegButton
-            label="Pulse"
-            active={metric === "pulse_bpm"}
-            onPress={() => setMetric("pulse_bpm")}
-          />
-          <SegButton
-            label="Systolic"
-            active={metric === "systolic"}
-            onPress={() => setMetric("systolic")}
-          />
-          <SegButton
-            label="Diastolic"
-            active={metric === "diastolic"}
-            onPress={() => setMetric("diastolic")}
-          />
-          <SegButton
-            label="BP (sys/dia)"
-            active={metric === "bp"}
-            onPress={() => setMetric("bp")}
-          />
-          <SegButton
-            label="FEV1 (L)"
-            active={metric === "fev1_l"}
-            onPress={() => setMetric("fev1_l")}
-          />
-          <SegButton
-            label="FEV1 (%)"
-            active={metric === "fev1_percent"}
-            onPress={() => setMetric("fev1_percent")}
-          />
-          <SegButton
-            label="PEF (L/min)"
-            active={metric === "pef_l_min"}
-            onPress={() => setMetric("pef_l_min")}
-          />
-          <SegButton
-            label="PEF (%)"
-            active={metric === "pef_percent"}
-            onPress={() => setMetric("pef_percent")}
-          />
+        <View style={{ gap: 8 }}>
+          <Text style={{ fontWeight: "600" }}>Range</Text>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <SegButton label="7d" active={rangeDays === 7} onPress={() => setRangeDays(7)} />
+            <SegButton label="30d" active={rangeDays === 30} onPress={() => setRangeDays(30)} />
+            <SegButton label="90d" active={rangeDays === 90} onPress={() => setRangeDays(90)} />
+          </View>
         </View>
-      </View>
 
-      <View style={{ padding: 12, borderWidth: 1, borderRadius: 8, gap: 6 }}>
-        <Text style={{ fontWeight: "600" }}>{getMetricLabel(metric)}</Text>
-        <Text>
-          Visible rows: {stats.rows} | Plotted points: {stats.count}
-          {stats.min !== null && stats.max !== null ? ` | Min: ${stats.min} | Max: ${stats.max}` : ""}
-        </Text>
+        <View style={{ gap: 8 }}>
+          <Text style={{ fontWeight: "600" }}>Metric</Text>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            <SegButton label="Pulse" active={metric === "pulse_bpm"} onPress={() => setMetric("pulse_bpm")} />
+            <SegButton label="BP (sys/dia)" active={metric === "bp"} onPress={() => setMetric("bp")} />
+            <SegButton label="FEV1" active={metric === "fev1"} onPress={() => setMetric("fev1")} />
+            <SegButton label="PEF" active={metric === "pef"} onPress={() => setMetric("pef")} />
+          </View>
 
-        {vitals.isLoading ? (
-          <Text>Loading…</Text>
-        ) : vitals.isError ? (
-          <Text>Error loading vitals.</Text>
-        ) : chartPoints.length < 2 ? (
-          <Text>Not enough data to chart yet. Add a few vitals entries.</Text>
-        ) : (
-          <TrendsLineChart
-            metric={metric}
-            title={getMetricLabel(metric)}
-            chartWidth={chartWidth}
-            chartPoints={chartPoints}
-            chartPoints2={chartPoints2}
-            line1Color={LINE1_COLOR}
-            line2Color={LINE2_COLOR}
-          />
-        )}
-      </View>
-    </ScrollView>
+          {metric === "fev1" && (
+            <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+              <SegButton label="L" active={fev1Mode === "abs"} onPress={() => setFev1Mode("abs")} />
+              <SegButton label="% predicted" active={fev1Mode === "pct"} onPress={() => setFev1Mode("pct")} />
+            </View>
+          )}
+
+          {metric === "pef" && (
+            <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+              <SegButton label="L/min" active={pefMode === "abs"} onPress={() => setPefMode("abs")} />
+              <SegButton label="% predicted" active={pefMode === "pct"} onPress={() => setPefMode("pct")} />
+            </View>
+          )}
+        </View>
+
+        <View style={[styles.card, styles.cardGap6]}>
+          <Text style={{ fontWeight: "600" }}>
+            {getMetricLabel(
+              metric,
+              metric === "fev1" ? fev1Mode : metric === "pef" ? pefMode : undefined
+            )}
+          </Text>
+          <Text>
+            Visible rows: {stats.rows} | Plotted points: {stats.count}
+            {stats.min !== null && stats.max !== null ? ` | Min: ${stats.min} | Max: ${stats.max}` : ""}
+          </Text>
+
+          {vitals.isLoading ? (
+            <Text>Loading…</Text>
+          ) : vitals.isError ? (
+            <Text>Error loading vitals.</Text>
+          ) : chartPoints.length < 2 ? (
+            <Text>Not enough data to chart yet. Add a few vitals entries.</Text>
+          ) : (
+            <TrendsLineChart
+              metric={metric}
+              title={getMetricLabel(
+                metric,
+                metric === "fev1" ? fev1Mode : metric === "pef" ? pefMode : undefined
+              )}
+              chartWidth={chartWidth}
+              chartPoints={chartPoints}
+              chartPoints2={chartPoints2}
+              line1Color={LINE1_COLOR}
+              line2Color={LINE2_COLOR}
+              series2Label={series2Label}
+            />
+          )}
+        </View>
+      </ScrollView>
+
+      <Fab
+        icon={Icons.add}
+        accessibilityLabel="Quick add"
+        onPress={() => {
+          Alert.alert("Quick add", "Choose what you want to add:", [
+            { text: "Vitals", onPress: () => navigation.navigate("AddVitals") },
+            { text: "Activity", onPress: () => navigation.navigate("AddActivity") },
+            { text: "Event", onPress: () => navigation.navigate("AddEvent") },
+            { text: "Cancel", style: "cancel" },
+          ]);
+        }}
+      />
+    </SafeAreaView>
   );
 }
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+  },
+  content: {
+    padding: theme.spacing.screenPadding,
+    gap: theme.spacing.gap,
+    paddingBottom: theme.spacing.fabBottomPadding,
+  },
+  card: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: theme.radius.card,
+    padding: theme.spacing.cardPadding,
+  },
+  cardGap6: {
+    gap: 6,
+  },
+});
