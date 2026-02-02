@@ -1,6 +1,6 @@
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { RootStackParamList } from "../../navigation/RootNavigator";
 import { supabase } from "../../services/supabase";
@@ -10,12 +10,70 @@ import { IconButton } from "../../ui/IconButton";
 import { Icons } from "../../ui/icons";
 import { theme } from "../../ui/theme";
 
-const onLogout = async () => {
-  await supabase.auth.signOut();
-};
 
 export default function SettingsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
+  const onLogout = async () => {
+    try {
+      console.log("Starting logout process...");
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.warn("Sign out error:", error.message);
+        Alert.alert("Sign out failed", error.message);
+        return;
+      }
+
+      console.log("Sign out successful");
+
+      // On web, reload to ensure auth state is cleared and UI updates.
+      if (Platform.OS === "web" && typeof window !== "undefined" && window.location) {
+        console.log("Reloading page...");
+        window.location.reload();
+        return;
+      }
+
+      // On native, try reloading the app via expo-updates if available to ensure UI refresh.
+      try {
+        const Updates = await import('expo-updates');
+        if (Updates?.reloadAsync) {
+          await Updates.reloadAsync();
+          return;
+        }
+      } catch (e) {
+        // ignore if expo-updates is not installed or fails
+      }
+
+      // If reload isn't possible, navigate to root which should trigger auth state update
+      try {
+        navigation.reset({ index: 0, routes: [{ name: 'MainTabs' as any }] });
+      } catch (_) {
+        // noop
+      }
+    } catch (e: any) {
+      console.warn("Sign out exception:", e?.message ?? e);
+      Alert.alert("Sign out failed", e?.message ?? String(e));
+    }
+  };
+
+  const handleSignOutPress = () => {
+    // Use native confirm on web since Alert.alert doesn't work well in web
+    if (Platform.OS === "web") {
+      const confirmed = window.confirm("Are you sure you want to sign out?");
+      if (confirmed) {
+        onLogout();
+      }
+    } else {
+      Alert.alert(
+        "Sign out",
+        "Are you sure you want to sign out?",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Sign out", style: "destructive", onPress: onLogout },
+        ]
+      );
+    }
+  };
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -57,18 +115,11 @@ export default function SettingsScreen() {
             <IconButton
               icon={Icons.settings}
               accessibilityLabel="Sign out"
-              onPress={() => {
-                Alert.alert(
-                  "Sign out",
-                  "Are you sure you want to sign out?",
-                  [
-                    { text: "Cancel", style: "cancel" },
-                    { text: "Sign out", style: "destructive", onPress: onLogout },
-                  ]
-                );
-              }}
+              onPress={handleSignOutPress}
             />
-            <Text style={{ color: "#DC2626", fontWeight: "600" }}>Sign out</Text>
+            <Pressable onPress={handleSignOutPress}>
+              <Text style={{ color: "#DC2626", fontWeight: "600" }}>Sign out</Text>
+            </Pressable>
           </View>
         </View>
 
