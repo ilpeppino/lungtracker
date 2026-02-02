@@ -1,0 +1,64 @@
+flowchart LR
+  %% Lung Tracker PoC - Current Architecture
+
+  subgraph Client["Mobile Client"]
+    RN["React Native Expo\nSupabase Auth client\nStores access token"]
+  end
+
+  subgraph Supabase["Supabase"]
+    Auth["Auth"]
+    DB["Postgres\nTables:\n- vitals_entries\n- activities\n- events\n- report_exports"]
+    Storage["Storage\nPrivate bucket: reports"]
+  end
+
+  subgraph Backend["Backend API on Render\nNode Express"]
+    API["API Routes\nPOST /reports/email-link\nGET /reports/exports\nPOST /reports/revoke/:id\nGET /reports/r/:token"]
+    Authz["Auth middleware\nValidate Supabase JWT\nExtract userId"]
+    Stats["Reporting stats\nAverage\nBest and worst\nTrend"]
+    Tpl["HTML template\nCover + summary + charts"]
+    PDF["PDF render\nPuppeteer"]
+    Crypto["Token ops\nRandom token\nSHA256 hash stored"]
+    RL["Rate limit\nOn /reports/r"]
+    Email["Email\nResend API"]
+  end
+
+  Recipient["Recipient\nEmail inbox and browser"]
+
+  %% Login
+  RN -->|Sign in| Auth
+  Auth -->|Session and access token| RN
+
+  %% Generate report
+  RN -->|Bearer access token\nPOST email-link| API
+  API --> Authz
+  Authz --> API
+
+  API -->|Read data| DB
+  API --> Stats
+  Stats --> Tpl
+  Tpl --> PDF
+  PDF -->|PDF buffer| API
+
+  API -->|Upload PDF| Storage
+  API -->|Insert export row\nToken hash and expiry| DB
+  API -->|Send link| Email
+  Email -->|Email with link| Recipient
+
+  %% List exports
+  RN -->|Bearer access token\nGET exports| API
+  API -->|Select exports\nIncludes revoked_at and status| DB
+  DB --> API
+  API --> RN
+
+  %% Revoke
+  RN -->|Bearer access token\nPOST revoke id| API
+  API -->|Update export row\nrevoked_at and status| DB
+
+  %% Public download
+  Recipient -->|Open link\nGET r token| API
+  API --> RL
+  API -->|Lookup token hash| DB
+  API -->|Signed URL TTL| Storage
+  API -->|Update downloaded_at| DB
+  API -->|302 redirect| Recipient
+  Recipient -->|GET signed URL| Storage
