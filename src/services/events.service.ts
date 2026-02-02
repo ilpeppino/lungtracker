@@ -28,7 +28,7 @@ export async function createEvent(input: CreateEventInput): Promise<Event> {
     .insert(payload)
     .select("*")
     .single();
-
+    
   if (error) throw new Error(error.message);
   return data as Event;
 }

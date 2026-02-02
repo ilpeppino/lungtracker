@@ -6,6 +6,8 @@ export function useAuth() {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  
+
   useEffect(() => {
     let mounted = true;
 
@@ -14,6 +16,7 @@ export function useAuth() {
       if (error) console.warn("getSession:", error.message);
       setSession(data.session ?? null);
       setIsLoading(false);
+      
     });
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {

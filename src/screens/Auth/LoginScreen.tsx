@@ -12,7 +12,12 @@ export default function LoginScreen({ navigation }: Props) {
 
   const onLogin = async () => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) Alert.alert("Login failed", error.message);
+    if (error) {
+      Alert.alert("Login failed", error.message);
+    } else {
+      const { data: { session } } = await supabase.auth.getSession();
+      console.log("Access token:", session?.access_token);
+    }
   };
 
   return (

@@ -236,3 +236,66 @@ using (auth.uid() = user_id);
 --
 -- Or you can create an RPC / trigger based on auth events (more complex).
 -- For POC, do it from the app.
+
+
+-- ============================================================
+-- Reporting exports (secure links) — tables + RLS policies
+-- ============================================================
+
+create extension if not exists "pgcrypto";
+
+create table if not exists public.report_exports (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+
+  range_start timestamptz not null,
+  range_end   timestamptz not null,
+
+  storage_bucket text not null default 'reports',
+  storage_path   text not null, -- e.g. reports/<user_id>/<report_id>.pdf
+
+  recipient_email text not null,
+
+  token_hash text not null, -- store sha256(token) (hex)
+  expires_at timestamptz not null,
+
+  sent_at timestamptz not null default now(),
+  downloaded_at timestamptz null,
+  revoked_at timestamptz null,
+
+  status text not null default 'sent', -- sent | downloaded | expired | revoked | failed
+  error text null
+);
+
+create index if not exists idx_report_exports_user_sent_at_desc
+  on public.report_exports (user_id, sent_at desc);
+
+create index if not exists idx_report_exports_expires_at
+  on public.report_exports (expires_at);
+
+alter table public.report_exports enable row level security;
+
+drop policy if exists "report_exports_select_own" on public.report_exports;
+create policy "report_exports_select_own"
+on public.report_exports
+for select
+using (auth.uid() = user_id);
+
+drop policy if exists "report_exports_insert_own" on public.report_exports;
+create policy "report_exports_insert_own"
+on public.report_exports
+for insert
+with check (auth.uid() = user_id);
+
+drop policy if exists "report_exports_update_own" on public.report_exports;
+create policy "report_exports_update_own"
+on public.report_exports
+for update
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "report_exports_delete_own" on public.report_exports;
+create policy "report_exports_delete_own"
+on public.report_exports
+for delete
+using (auth.uid() = user_id);
