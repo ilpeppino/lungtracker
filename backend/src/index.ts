@@ -15,6 +15,9 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 
 app.use("/reports", reportsRouter);
 
-app.listen(Number(config.PORT), () => {
-  console.log(`API listening on :${config.PORT}`);
+// 🔑 IMPORTANT: Render provides PORT dynamically
+const port = Number(process.env.PORT ?? config.PORT ?? 8080);
+
+app.listen(port, "0.0.0.0", () => {
+  console.log(`API listening on ${port}`);
 });
