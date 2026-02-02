@@ -1,7 +1,14 @@
 import { jest } from '@jest/globals';
+
+// Set up React Native bridge for testing BEFORE importing testing-library
+if (!global.__fbBatchedBridgeConfig) {
+  global.__fbBatchedBridgeConfig = {};
+}
+
 import '@testing-library/jest-native/extend-expect';
 
 declare global {
+  var __fbBatchedBridgeConfig: any;
   var testUser: {
     id: string;
     email: string;
@@ -124,6 +131,29 @@ jest.mock('@tanstack/react-query', () => ({
     invalidateQueries: jest.fn()
   })),
   QueryClientProvider: ({ children }: { children: React.ReactNode }) => children
+}));
+
+// Mock the Supabase service instance
+jest.mock('src/services/supabase', () => ({
+  supabase: {
+    auth: {
+      signInWithPassword: jest.fn(),
+      signOut: jest.fn(),
+      getSession: jest.fn(() => Promise.resolve({ data: { session: null }, error: null })),
+      getUser: jest.fn(),
+      onAuthStateChange: jest.fn(() => ({
+        data: { subscription: { unsubscribe: jest.fn() } }
+      }))
+    },
+    from: jest.fn(() => ({
+      select: jest.fn().mockReturnThis(),
+      insert: jest.fn().mockReturnThis(),
+      update: jest.fn().mockReturnThis(),
+      delete: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      single: jest.fn()
+    }))
+  }
 }));
 
 // Global test utilities

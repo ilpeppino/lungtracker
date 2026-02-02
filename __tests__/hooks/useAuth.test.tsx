@@ -1,17 +1,9 @@
-// Mock the supabase client first
-const mockSupabase = {
-  auth: {
-    getSession: jest.fn(),
-    onAuthStateChange: jest.fn()
-  }
-};
 
-jest.mock('@/src/services/supabase', () => ({
-  supabase: mockSupabase
-}));
-
-import { useAuth } from '@/src/hooks/useAuth';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
+import { useAuth } from 'src/hooks/useAuth';
+
+// Mock supabase is provided by setup.ts
+const { supabase } = require('src/services/supabase');
 
 describe('useAuth', () => {
   beforeEach(() => {
@@ -19,12 +11,12 @@ describe('useAuth', () => {
   });
 
   it('should initialize with loading state', () => {
-    mockSupabase.auth.getSession.mockResolvedValue({
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
       data: { session: null },
       error: null
     });
 
-    mockSupabase.auth.onAuthStateChange.mockReturnValue({
+    (supabase.auth.onAuthStateChange as jest.Mock).mockReturnValue({
       data: { subscription: { unsubscribe: jest.fn() } }
     });
 
@@ -42,12 +34,12 @@ describe('useAuth', () => {
       access_token: 'access-token-123'
     };
 
-    mockSupabase.auth.getSession.mockResolvedValue({
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
       data: { session: mockSession },
       error: null
     });
 
-    mockSupabase.auth.onAuthStateChange.mockReturnValue({
+    (supabase.auth.onAuthStateChange as jest.Mock).mockReturnValue({
       data: { subscription: { unsubscribe: jest.fn() } }
     });
 
@@ -69,14 +61,14 @@ describe('useAuth', () => {
       access_token: 'new-access-token'
     };
 
-    mockSupabase.auth.getSession.mockResolvedValue({
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
       data: { session: initialSession },
       error: null
     });
 
     let authStateChangeCallback: (event: string, session: any) => void;
 
-    mockSupabase.auth.onAuthStateChange.mockImplementation((callback) => {
+    (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((callback: any) => {
       authStateChangeCallback = callback;
       return {
         data: { subscription: { unsubscribe: jest.fn() } }
@@ -105,14 +97,14 @@ describe('useAuth', () => {
       access_token: 'access-token-123'
     };
 
-    mockSupabase.auth.getSession.mockResolvedValue({
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
       data: { session: initialSession },
       error: null
     });
 
     let authStateChangeCallback: (event: string, session: any) => void;
 
-    mockSupabase.auth.onAuthStateChange.mockImplementation((callback) => {
+    (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((callback: any) => {
       authStateChangeCallback = callback;
       return {
         data: { subscription: { unsubscribe: jest.fn() } }
@@ -136,12 +128,12 @@ describe('useAuth', () => {
   });
 
   it('should handle getSession errors gracefully', async () => {
-    mockSupabase.auth.getSession.mockResolvedValue({
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
       data: { session: null },
       error: { message: 'Network error' }
     });
 
-    mockSupabase.auth.onAuthStateChange.mockReturnValue({
+    (supabase.auth.onAuthStateChange as jest.Mock).mockReturnValue({
       data: { subscription: { unsubscribe: jest.fn() } }
     });
 
@@ -163,12 +155,12 @@ describe('useAuth', () => {
   it('should unsubscribe on unmount', () => {
     const mockUnsubscribe = jest.fn();
 
-    mockSupabase.auth.getSession.mockResolvedValue({
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
       data: { session: null },
       error: null
     });
 
-    mockSupabase.auth.onAuthStateChange.mockReturnValue({
+    (supabase.auth.onAuthStateChange as jest.Mock).mockReturnValue({
       data: { subscription: { unsubscribe: mockUnsubscribe } }
     });
 
