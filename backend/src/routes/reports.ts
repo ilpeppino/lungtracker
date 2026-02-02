@@ -189,7 +189,8 @@ reportsRouter.post("/revoke/:id", async (req, res) => {
  */
 reportsRouter.get("/r/:token", downloadLimiter, async (req, res) => {
   try {
-    const token = req.params.token;
+    const tokenParam = req.params.token;
+    const token = Array.isArray(tokenParam) ? tokenParam[0] : tokenParam;
     if (!token) return res.status(400).send("Missing token");
 
     const tokenHash = sha256Hex(token);
