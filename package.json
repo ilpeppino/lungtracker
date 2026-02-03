@@ -1,6 +1,7 @@
 {
   "name": "lung-tracker-mobile",
   "main": "node_modules/expo/AppEntry.js",
+  "homepage": "https://ilpeppino.github.io/lungtracker",
   "version": "1.0.0",
   "scripts": {
     "start": "expo start",
