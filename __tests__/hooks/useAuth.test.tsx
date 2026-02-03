@@ -1,6 +1,6 @@
 
 import { act, renderHook, waitFor } from '@testing-library/react-native';
-import { useAuth } from 'src/hooks/useAuth';
+import { useAuth } from '../../src/hooks/useAuth';
 
 // Mock supabase is provided by setup.ts
 const { supabase } = require('src/services/supabase');
@@ -10,7 +10,7 @@ describe('useAuth', () => {
     jest.clearAllMocks();
   });
 
-  it('should initialize with loading state', () => {
+  it('should initialize with loading state', async () => {
     (supabase.auth.getSession as jest.Mock).mockResolvedValue({
       data: { session: null },
       error: null
@@ -26,6 +26,10 @@ describe('useAuth', () => {
     expect(result.current.session).toBeNull();
     expect(result.current.user).toBeNull();
     expect(result.current.isAuthed).toBe(false);
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
   });
 
   it('should set session when user is authenticated', async () => {
@@ -152,7 +156,7 @@ describe('useAuth', () => {
     consoleSpy.mockRestore();
   });
 
-  it('should unsubscribe on unmount', () => {
+  it('should unsubscribe on unmount', async () => {
     const mockUnsubscribe = jest.fn();
 
     (supabase.auth.getSession as jest.Mock).mockResolvedValue({
@@ -165,6 +169,11 @@ describe('useAuth', () => {
     });
 
     const { unmount } = renderHook(() => useAuth());
+
+    // Wait for async initialization to complete
+    await waitFor(() => {
+      expect(mockUnsubscribe).not.toHaveBeenCalled();
+    }, { timeout: 100 });
 
     unmount();
 

@@ -7,6 +7,18 @@ if (!global.__fbBatchedBridgeConfig) {
 
 import '@testing-library/jest-native/extend-expect';
 
+// Suppress react-test-renderer deprecation warning from @testing-library/react-native
+const originalError = console.error;
+console.error = (...args: any[]) => {
+  if (
+    typeof args[0] === 'string' &&
+    args[0].includes('react-test-renderer is deprecated')
+  ) {
+    return;
+  }
+  originalError.call(console, ...args);
+};
+
 declare global {
   var __fbBatchedBridgeConfig: any;
   var testUser: {

@@ -4,16 +4,14 @@ export default {
     slug: "lung-tracker",
     scheme: "lungtracker",
 
+    experiments: {
+      baseUrl: "/lungtracker",
+    },
+
     android: {
       package: "com.lungtracker.app",
     },
 
-    web: {
-      basePath: "/lungtracker",
-    },
-
-    // Optional now, but strongly recommended to add immediately
-    // so iOS builds won't fail later.
     ios: {
       bundleIdentifier: "com.lungtracker.app",
     },
