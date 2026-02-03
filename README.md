@@ -1,3 +1,7 @@
+[![Run Tests](https://github.com/ilpeppino/lungtracker/actions/workflows/tests.yml/badge.svg)](https://github.com/ilpeppino/lungtracker/actions/workflows/tests.yml)
+
+[![Deploy Expo Web to GitHub Pages](https://github.com/ilpeppino/lungtracker/actions/workflows/pages.yml/badge.svg)](https://github.com/ilpeppino/lungtracker/actions/workflows/pages.yml)
+
 # Lung Tracker Mobile
 
 A mobile application for tracking lung health metrics and trends, built with Expo and React Native.
